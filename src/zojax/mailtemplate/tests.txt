@@ -1,0 +1,366 @@
+============================
+zojax:mailtemplate directive
+============================
+
+Registering mailtemplate with `zojax:mailtemplate` directive.
+First, we need to register the directives:
+
+  >>> from zope import interface, component
+  >>> from zojax.mailtemplate import interfaces, tests, base, template
+
+  >>> from zope.configuration import xmlconfig
+  >>> import zojax.mailtemplate
+  >>> context = xmlconfig.file('meta.zcml', zojax.mailtemplate)
+
+Let's register simple mail template
+
+  >>> context = xmlconfig.string('''
+  ... <configure xmlns:zojax="http://namespaces.zope.org/zojax"
+  ...      i18n_domain="zope">
+  ...  <zojax:mailtemplate
+  ...    for="*"
+  ...    name="test.message"
+  ...    subject="Test subject"
+  ...    contentType="text/html"
+  ...    charset="utf-8"
+  ...    template="tests.pt" />
+  ... </configure>''', context)
+
+  >>> class Content(object):
+  ...     pass
+  >>> content = Content()
+
+  >>> from zope.publisher.browser import TestRequest
+
+  >>> request = TestRequest()
+
+  >>> mt = component.getMultiAdapter(
+  ...     (content, request), interfaces.IMailTemplate, name='test.message')
+
+  >>> mt
+  <zojax.mailtemplate.zcml.MailTemplateClass ...>
+
+  >>> mt.subject
+  u'Test subject'
+
+  >>> mt.contentType
+  u'text/html'
+
+  >>> mt.charset
+  'utf-8'
+
+  >>> print mt()
+  Content-Type: text/html; charset="utf-8"
+  MIME-Version: 1.0
+  Content-Transfer-Encoding: base64
+  Subject: Test subject
+  Date: ...
+  Message-ID: 
+  X-mailer: zojax.mailer
+  Errors-To: errors@zojax.net
+  Return-Path: errors@zojax.net
+  From: Portal administrator <portal@zojax.net>
+  VGVzdCBtYWlsIHRlbXBsYXRlIDEK
+
+We can send template
+
+  >>> mt.send(('test@zojax.net',))
+  >>> from_hdr, to_hdr, message = tests.getEMails(True)[0]
+  >>> from_hdr, to_hdr
+  (u'Portal administrator <portal@zojax.net>', ('test@zojax.net',))
+
+  >>> print message
+  Content-Type: text/html; charset="utf-8"
+  MIME-Version: 1.0
+  Content-Transfer-Encoding: base64
+  Subject: Test subject
+  Date: ...
+  Message-ID: 
+  X-mailer: zojax.mailer
+  To: test@zojax.net
+  Errors-To: errors@zojax.net
+  Return-Path: errors@zojax.net
+  From: Portal administrator <portal@zojax.net>
+  VGVzdCBtYWlsIHRlbXBsYXRlIDEK
+
+We can add header to template
+
+  >>> mt.addHeader('X-Mailer', 'doctests')
+  >>> print mt()
+  Content-Type: text/html; charset="utf-8"
+  ...
+  X-Mailer: doctests
+  ...
+  <BLANKLINE>
+
+We can register mail template for multiple contexts
+
+  >>> context = xmlconfig.string('''
+  ... <configure xmlns:zojax="http://namespaces.zope.org/zojax" i18n_domain="zope">
+  ...  <zojax:mailtemplate
+  ...    for="* *"
+  ...    subject="Test subject"
+  ...    contentType="text/html"
+  ...    charset="utf-8"
+  ...    template="tests.pt" />
+  ... </configure>''', context)
+
+  >>> content2 = Content()
+
+  >>> mt = component.getMultiAdapter(
+  ...     (content, content2, request), interfaces.IMailTemplate)
+
+  >>> mt
+  <zojax.mailtemplate.zcml.MailTemplateClass ...>
+
+  >>> mt.context is content
+  True
+
+  >>> mt.context0 is content2
+  True
+
+  >>> mt.contexts == (content2,)
+  True
+
+
+We can't use not exsited template
+
+  >>> context = xmlconfig.string('''
+  ... <configure xmlns:zojax="http://namespaces.zope.org/zojax" i18n_domain="zojax">
+  ...  <zojax:mailtemplate
+  ...    for="*"
+  ...    name="test.message"
+  ...    subject="Test subject"
+  ...    contentType="text/html"
+  ...    charset="utf-8"
+  ...    template="unknown.pt" />
+  ... </configure>''', context)
+  Traceback (most recent call last):
+  ...
+  ZopeXMLConfigurationError: ...
+
+
+We can use custom class implementation
+
+  >>> class MyMailTemplate(object):
+  ...     pass
+
+  >>> context = xmlconfig.string('''
+  ... <configure xmlns:zojax="http://namespaces.zope.org/zojax" i18n_domain="zojax">
+  ...  <zojax:mailtemplate
+  ...    for="*"
+  ...    name="test.message2"
+  ...    subject="Test subject"
+  ...    class="zojax.mailtemplate.TESTS.MyMailTemplate"
+  ...    template="tests.pt" />
+  ... </configure>''', context)
+
+  >>> mt = component.getMultiAdapter(
+  ...     (content, request), interfaces.IMailTemplate, name='test.message2')
+
+  >>> isinstance(mt, MyMailTemplate)
+  True
+
+We can add 'provides' to mail template
+
+  >>> class IMyTemplate(interface.Interface):
+  ...     pass
+
+  >>> context = xmlconfig.string('''
+  ... <configure xmlns:zojax="http://namespaces.zope.org/zojax" i18n_domain="zojax">
+  ...  <zojax:mailtemplate
+  ...    for="*"
+  ...    name="test.message3"
+  ...    subject="Test subject"
+  ...    provides="zojax.mailtemplate.TESTS.IMyTemplate"
+  ...    template="tests.pt" />
+  ... </configure>''', context)
+
+  >>> mt = component.getMultiAdapter(
+  ...     (content, request), interfaces.IMailTemplate, name='test.message3')
+  Traceback (most recent call last):
+  ...
+  ComponentLookupError: ...
+
+  >>> mt = component.getMultiAdapter(
+  ...     (content, request), IMyTemplate, name='test.message3')
+
+  >>> IMyTemplate.providedBy(mt)
+  True
+
+We can override 'FROM' address, we need register IFromAddress adapter
+for mailtemplate.
+
+  >>> from zojax.mail.interfaces import IFromAddress
+
+  >>> class FromAddress(object):
+  ...     interface.implements(IFromAddress)
+  ...     component.adapts(IMyTemplate)
+  ...
+  ...     def __init__(self, remplate):
+  ...         self.from_address = 'portalAdmin@zojax.net'
+
+  >>> component.provideAdapter(FromAddress)
+
+  >>> print mt()
+  Content-Type: text/plain; charset="utf-8"
+  ...
+  From: portalAdmin@zojax.net
+  ...
+  <BLANKLINE>
+
+We add any header to generated mail message
+
+  >>> from zojax.mailtemplate.interfaces import IMailHeaders
+
+  >>> class MyHeaders(object):
+  ...     interface.implements(IMailHeaders)
+  ...     component.adapts(IMyTemplate, interface.Interface)
+  ...
+  ...     def __init__(self, template, context):
+  ...         self.headers = (('To', 'nkim@zojax.net', False),
+  ...                         ('Reply-To', 'return@zojax.net', False),)
+
+  >>> component.provideAdapter(MyHeaders)
+
+  >>> print mt()
+  Content-Type: text/plain; charset="utf-8"
+  ...
+  To: nkim@zojax.net
+  Reply-To: return@zojax.net
+  ...
+  <BLANKLINE>
+
+We can add files to mail template
+
+  >>> img = 'GIF89a\t\x00\r\x00\x91\x02\x00\xb3\xb3\xb3\xff\xa5\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x01\x00\x00\x02\x00,\x00\x00\x00\x00\t\x00\r\x00\x00\x02\x16\x94\x8fy\xc1\xcb\xef^\x88\x07Xe\x01\xbe\x06v9}\x12\xa5\x94H\x01\x00;'
+  >>> mt.addAttachment(img, 'image/gif', 'test.gif')
+
+  >>> print mt()
+  Content-Type: multipart/mixed; boundary="===============...=="
+  ...
+  Subject: Test subject
+  ...
+  --===============...==
+  Content-Type: image/gif
+  MIME-Version: 1.0
+  Content-Id: <test.gif@zojax>
+  Content-Disposition: attachment; filename="test.gif"
+  Content-Transfer-Encoding: base64
+  R0lGODlhCQANAJECALOzs/+lAP///wAAACH5BAEAAAIALAAAAAAJAA0AAAIWlI95wcvvXogHWGUB
+  vgZ2OX0SpZRIAQA7
+  --===============...==
+  ...
+
+  >>> img = 'GIF89a\t\x00\r\x00\x91\x02\x00\xb3\xb3\xb3\xff\xa5\x00\xff\xff\xff\x00\x00\x00!\xf9\x04\x01\x00\x00\x02\x00,\x00\x00\x00\x00\t\x00\r\x00\x00\x02\x16\x94\x8fy\xc1\xcb\xef^\x88\x07Xe\x01\xbe\x06v9}\x12\xa5\x94H\x01\x00;'
+  >>> mt.addAttachment(img, 'image/gif', 'test2.gif', 'inline')
+
+  >>> print mt()
+  Content-Type: multipart/mixed; boundary="===============...=="
+  ...
+  --===============...==
+  Content-Type: image/gif
+  MIME-Version: 1.0
+  Content-Id: <test.gif@zojax>
+  Content-Disposition: attachment; filename="test.gif"
+  Content-Transfer-Encoding: base64
+  <BLANKLINE>
+  R0lGODlhCQANAJECALOzs/+lAP///wAAACH5BAEAAAIALAAAAAAJAA0AAAIWlI95wcvvXogHWGUB
+  vgZ2OX0SpZRIAQA7
+  --===============...==
+  ...
+  --===============...==
+  Content-Type: image/gif
+  MIME-Version: 1.0
+  Content-Id: <test2.gif@zojax>
+  Content-Disposition: inline; filename="test2.gif"
+  Content-Transfer-Encoding: base64
+  <BLANKLINE>
+  R0lGODlhCQANAJECALOzs/+lAP///wAAACH5BAEAAAIALAAAAAAJAA0AAAIWlI95wcvvXogHWGUB
+  vgZ2OX0SpZRIAQA7
+  --===============...==--
+  ...
+
+
+Keywords arguments
+
+  >>> dummy = mt(form='test', title='test title')
+  >>> mt.form, mt.title
+  ('test', 'test title')
+
+  >>> mt.send(('test@zojax.net',), title2='test title2')
+  >>> mt.title2
+  'test title2'
+
+We can add alternative multipart message
+Let's register alternative mail template
+
+  >>> from zojax.mailtemplate.tests import tmpl
+
+  >>> class MyAltMailTemplate(base.MailTemplateBase):
+  ...     template = tmpl
+  ...     contentType = 'text/palin'
+  ...     subject = u'Test subject'
+  ...     charset = 'utf-8'
+
+  >>> mt = component.getMultiAdapter(
+  ...     (content, request), interfaces.IMailTemplate, name='test.message')
+
+  >>> mt.addAlternative(MyAltMailTemplate(content, request))
+
+  >>> print mt()
+  Content-Type: multipart/alternative; boundary="===============...=="
+  MIME-Version: 1.0
+  Subject: Test subject
+  Date: ...
+  Message-ID: 
+  X-mailer: zojax.mailer
+  Errors-To: errors@zojax.net
+  Return-Path: errors@zojax.net
+  From: Portal administrator <portal@zojax.net>
+  --===============...==
+  Content-Type: text/html; charset="utf-8"
+  MIME-Version: 1.0
+  Content-Transfer-Encoding: base64
+  VGVzdCBtYWlsIHRlbXBsYXRlIDEK
+  --===============...==
+  Content-Type: text/palin; charset="utf-8"
+  MIME-Version: 1.0
+  Content-Transfer-Encoding: base64
+  Subject: Test subject
+  VGVzdCBtYWlsIHRlbXBsYXRlIFRFWFQK
+  --===============...==--
+
+
+We can send template
+
+  >>> tests.emails = []
+  >>> mt.send(('test@zojax.net',))
+  >>> from_hdr, to_hdr, message = tests.getEMails(True)[0]
+  >>> from_hdr, to_hdr
+  (u'Portal administrator <portal@zojax.net>', ('test@zojax.net',))
+
+  >>> print message
+  Content-Type: multipart/alternative; boundary="===============...=="
+  MIME-Version: 1.0
+  Subject: Test subject
+  Date: ...
+  Message-ID: 
+  X-mailer: zojax.mailer
+  To: test@zojax.net
+  Errors-To: errors@zojax.net
+  Return-Path: errors@zojax.net
+  From: Portal administrator <portal@zojax.net>
+  --===============...==
+  Content-Type: text/html; charset="utf-8"
+  MIME-Version: 1.0
+  Content-Transfer-Encoding: base64
+  VGVzdCBtYWlsIHRlbXBsYXRlIDEK
+  --===============...==
+  Content-Type: text/palin; charset="utf-8"
+  MIME-Version: 1.0
+  Content-Transfer-Encoding: base64
+  Subject: Test subject
+  VGVzdCBtYWlsIHRlbXBsYXRlIFRFWFQK
+  --===============...==--
+

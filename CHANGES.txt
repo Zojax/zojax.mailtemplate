@@ -1,0 +1,73 @@
+=======
+CHANGES
+=======
+
+1.2.2 (Unreleased)
+------------------
+
+
+1.2.1 (2009-08-14)
+------------------
+
+- Fixed tests for python2.4
+
+
+1.2.0 (2009-07-01)
+------------------
+
+- Added extra api for adding alternative messages to main message
+
+- Add X-Mailer header to generated messages 
+
+- Copyright changed to 'Zope Foundation and Contributors'
+
+
+1.1.0 (2009-05-18)
+------------------
+
+- Allow register mail template to multiple contexts ('for' directive attribute)
+
+
+1.0.4 (2009-04-08)
+------------------
+
+- Register mailtemplate adapter for provided interfaces
+
+
+1.0.3 (2009-03-27)
+------------------
+
+- Update generator headers
+
+- Check headers before add default headers
+
+
+1.0.2 (2008-11-24)
+------------------
+
+- Fixed python2.4 compatibility
+
+
+1.0.1 (2008-10-20)
+------------------
+
+- Added keyword arguments to send, __call__ methods,
+  kw automaticlly set as instance attributes.
+
+
+1.0.0 (2008-04-23)
+-------------------
+
+- Make 'subject' optional
+
+- Added IMailHeaders that allow override mail headers
+
+- zojax.mail is optional
+
+- Tests added
+
+
+0.1.0 (2008-04-14)
+------------------
+
+- Initial release
