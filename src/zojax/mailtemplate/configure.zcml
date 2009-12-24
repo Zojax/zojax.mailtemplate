@@ -1,0 +1,20 @@
+<configure
+   xmlns="http://namespaces.zope.org/zope"
+   xmlns:zojax="http://namespaces.zope.org/zojax"
+   i18n_domain="zojax.mailtemplate">
+
+  <adapter factory=".generator.MailGenerator" />
+
+ <adapter
+     provides="zojax.mail.interfaces.IMessage"
+     factory=".generator.MailGenerator" />
+
+  <adapter
+     name="from"
+     factory=".mailer.FromHeaders" />
+
+  <adapter
+     name="errors"
+     factory=".mailer.ErrorsHeaders" />
+
+</configure>
